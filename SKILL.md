@@ -2,7 +2,7 @@
 name: oil-skill-creator
 description: 创建、评审、整改和发布 Skill。用户想从零创建 Skill、评审现有 Skill、检查它是否真正有用、修复触发或执行流程，或者改善首次使用、稳定性、Token 开销、文件分层、弱模型可读性与跨平台兼容性时使用。不要用于执行目标 Skill 负责的实际任务，也不要因为普通的编码、设计或写作请求触发。
 license: MIT
-compatibility: 核心脚本只使用 Python 3 标准库，支持 macOS、Windows 和 Linux；独立效果评估需要宿主能够启动子 Agent，或提供相同用途的隔离执行能力。
+compatibility: 核心脚本只使用 Python 3 标准库；可选凭据输入页需要 Node.js 22.18+ 和系统凭据服务，已验证 macOS，Windows 与 Linux 待实机验证；独立效果评估需要隔离执行能力。
 ---
 
 # oil-skill-creator
@@ -84,7 +84,9 @@ Review 默认只读，不创建快照、不修改、不打包。整改禁止用�
 
 登录、密钥、系统安装、覆盖、删除和外部写入必须先获得授权。
 
-目标 Skill 需要持久化配置或凭据时，按 [兼容性](references/compatibility.md) 分开设计普通配置、凭据引用和密钥存储。不要把密钥值写进 JSON、Skill 文件、日志或 Agent 上下文。这是目标 Skill 的设计与验收要求，不表示本 Skill 自带业务凭据适配器。
+目标 Skill 需要持久化配置或凭据时，按 [兼容性](references/compatibility.md) 分开设计普通配置、凭据引用和密钥存储。不要把密钥值写进 JSON、Skill 文件、日志或 Agent 上下文。
+
+目标 Skill 在本机桌面环境需要用户输入 API Key 等单行凭据、且没有现成安全入口时，读 [可复用凭据输入页](references/credential-ui.md)，用安装脚本接入固定组件。单 Key 与同页多 Key 共用模板，每项独立声明，页面配置控制组合顺序与文案；不要为每个 Skill 重新生成页面。说明 macOS 钥匙串、Windows 凭据管理器与 Linux Secret Service 的前提及安全边界；普通设置、OAuth、CI 和远程服务器不直接套用输入页。保存端、部分失败恢复与业务读取端一起验证。
 
 重复运行初始化或迁移流程时，不能破坏已有配置，也不能产生重复结果。失败时保留仍然可用的中间产物，并说明失败位置、恢复方法和还没有执行的必做步骤。
 

@@ -11,6 +11,7 @@
 - 最小且清楚的 Skill 文件结构，不为了完整感创建空目录；
 - 明确的触发与反向边界，减少误触发和漏触发；
 - 静默、可恢复的首次使用流程；
+- 可接入目标 Skill 的固定凭据输入页，通过脚本修改声明，避免反复生成页面；
 - 用程序固定确定、重复、失败敏感的步骤；
 - 需要前后效果对照时使用的不可变快照与固定基线；
 - 触发测试、效果聚合、本地评审页和可重复发布包；
@@ -42,7 +43,7 @@ https://github.com/oil-oil/oil-skill-creator
 npx skills add oil-oil/oil-skill-creator
 ```
 
-该安装方式需要本机能够运行 `npx`，但 Node.js 不是 Skill 的运行依赖。
+该安装方式需要本机能够运行 `npx`。核心创作与校验流程不依赖 Node.js；可选凭据输入页需要 Node.js 22.18+。
 
 核心脚本要求 Python 3.10 或更高版本，只使用标准库，无需安装额外依赖，也不需要密钥或初始化配置。
 
@@ -88,6 +89,8 @@ npx skills add oil-oil/oil-skill-creator
 
 复杂配置、反复预览或人工确认不必每次临时生成界面。适合时，Skill 会使用固定页面读取 manifest，由程序负责加载和保存，Agent 只串联操作流程。
 
+本机单行密钥输入可使用随附组件：单 Key 或同页 1 至 16 个 Key 共用黑白灰模板。安装脚本将组件带入目标 Skill；字段声明控制凭据引用和输入提示，页面配置控制组合顺序与文案。已有项留空保留，部分保存失败可核对状态后补填。密钥分别使用 macOS 钥匙串、Windows 凭据管理器或 Linux Secret Service；前提、管理入口、使用场景与安全边界见 [凭据输入页](references/credential-ui.md)。已有安全能力优先复用，普通设置、OAuth、CI 和远程服务器另按实际需求设计。
+
 ### 能力较弱的模型能否看懂
 
 检查入口、模式、术语、分支位置和资源读取时机。主文件只保留主流程，阶段细节按需读取，同一规则不在多个文件重复。
@@ -97,6 +100,7 @@ npx skills add oil-oil/oil-skill-creator
 | 工具 | 用途 |
 | --- | --- |
 | `scaffold_skill.py` | 预览并创建最小 Skill 骨架，拒绝覆盖已有目录 |
+| `install_credential_ui.py` | 向现有 Skill 安装固定凭据组件，生成非敏感声明并保护已有修改 |
 | `validate_skill.py` | 检查结构、链接、重复、个人路径、明文凭据、弱模型风险和宿主中立 |
 | `snapshot_skill.py` | 在需要效果对照时保存不可覆盖的旧版基线 |
 | `prepare_evaluation.py` | 创建固定的新版、普通 Agent 或旧版对照目录 |
@@ -141,13 +145,15 @@ npx skills add oil-oil/oil-skill-creator
 | 无浏览器或 GUI | 核心流程可用；评审页只生成文件，不自动打开 |
 | 无子 Agent | 创建、静态 Review 和程序测试可用；独立效果对照降级 |
 | 离线环境 | 核心脚本只处理本地文件，不联网 |
+| 可选凭据输入页 | Node.js 22.18+；macOS 原生保存与回读已验证，Windows / Linux 待实机验证 |
 
 脚本使用 `pathlib` 和 UTF-8，不依赖 bash、PowerShell、Homebrew 或单平台打开命令。兼容性只描述已经实现或验证过的范围。
 
 ## 数据与安全边界
 
 - 只处理用户明确指定的本地文件；普通配置与密钥分开保存；
-- 本项目自身无需密钥，也不提供通用凭据适配器；它要求目标 Skill 优先使用系统凭据存储，JSON 只保存非敏感配置和凭据引用；
+- 本项目核心流程无需密钥；可选输入组件用于目标 Skill 的凭据保存，JSON 只保存非敏感声明和凭据引用；
+- 系统凭据库不能单独隔离同一用户下有任意代码执行权限的 Agent；业务读取程序仍须可信，不向上下文回传密钥；
 - 默认拒绝覆盖已有 Skill、快照、评审页、iteration 和发布包；
 - 打包默认排除 Git、虚拟环境、缓存、评估数据和运行 workspace；
 - 不负责执行目标 Skill 的实际业务任务；
@@ -162,6 +168,8 @@ npx skills add oil-oil/oil-skill-creator
 ```
 
 测试覆盖文件保护、快照、基础结构、资源链接、敏感信息、宿主中立、内容重复、弱模型结构、效果评估、触发测试和可重复打包。
+
+凭据组件另有多 key 存储隔离、并发页面会话和多变量注入测试。[跨平台工作流](.github/workflows/credential-ui.yml) 在推送、PR 或手动触发时测试三种桌面系统与两个 Node.js 版本，使用随机假凭据验证真实系统后端。工作流配置完成不等于三端已经通过，需要以实际运行记录为准。
 
 需要继续设计 GitHub 首页时，可以使用 [beautify-github-readme](https://github.com/oil-oil/beautify-github-readme) 调整阅读顺序或制作视觉资源；它不是安装或运行依赖。
 

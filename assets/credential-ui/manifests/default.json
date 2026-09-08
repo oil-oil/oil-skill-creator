@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "id": "sample-skill",
+  "label": "服务 API Key",
+  "credential": "sample-skill/service/default"
+}

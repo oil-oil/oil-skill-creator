@@ -148,3 +148,15 @@ npm run test:native
 常规测试使用假后端与受控 DOM，不操作真实浏览器。原生测试经真实同页 HTTP 入口写入随机假凭据，检查多变量业务读取与隔离，最后清理测试项。修改前端后必须提交一致的 public/app.js，最终用户无需编译。
 
 维护时同时验证单 Key、同页多 Key、留空保留、部分失败重试、未知字段拒绝、会话隔离、状态脱敏及系统后端。不能用另写的静态演示替代正式页面测试。
+
+## 固定业务入口
+
+`manifests/profiles.json` 只保存业务名、声明文件和环境变量，不保存密钥。目标 Skill 接入时提供实际配置名；单项或多项复用相同页面与运行器：
+
+```bash
+node src/profile.ts status default
+node src/profile.ts setup default
+node src/profile.ts run default -- your-program your-arguments
+```
+
+status 退出码 0 表示所需凭据可读取，2 表示缺失，1 表示后端或配置错误。setup 由用户亲自填写；run 优先复用运行时环境变量，缺失时仅读取对应声明，不把其他服务凭据注入任务。指定其他服务时同时修改业务参数，不能只换凭据。

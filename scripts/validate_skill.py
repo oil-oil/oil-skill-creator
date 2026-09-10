@@ -748,16 +748,22 @@ def _check_host_neutral(
         for pattern in HOST_BRAND_TEXT_PATTERNS:
             for match in pattern.finditer(text):
                 mentions += 1
+                line = text[text.rfind('\n', 0, match.start()) + 1:text.find('\n', match.end()) if '\n' in text[match.end():] else len(text)]
+                # 品牌作为示例、模型或服务名，不足以证明宿主耦合。
+                if not re.search(r'只在|仅在|必须.{0,30}(?:Codex|Claude|ChatGPT|Cursor|Windsurf)|(?:require|only in|must use).{0,30}(?:Codex|Claude|ChatGPT|Cursor|Windsurf)|[~$]/?\.(?:codex|claude|cursor)/', line, re.I):
+                    continue
                 report.add(
                     "error",
                     "compatibility.host-coupling",
-                    "通用 Skill 的正式文档包含具体宿主品牌；改写为能力描述，或明确改为宿主专用 Skill",
+                    "发现宿主专用执行要求；核对是否应改为能力描述或明确声明宿主依赖",
                     _relative(skill_path, path),
                     _line_number(text, match.start()),
                 )
     for path in sorted(skill_path.rglob("*"), key=lambda item: item.as_posix()):
         relative = path.relative_to(skill_path)
         if any(part in SKIP_DIRS for part in relative.parts):
+            continue
+        if relative.as_posix() == 'agents/openai.yaml' or relative.parts[0] == 'adapters' or (relative.parts[0] == 'assets' and path.suffix.lower() in {'.png', '.jpg', '.jpeg', '.webp', '.svg', '.ico'}):
             continue
         if HOST_BRAND_PATH_RE.search(relative.as_posix()):
             mentions += 1
@@ -845,8 +851,25 @@ def _markdown_section(text: str, markers: tuple[str, ...]) -> str:
     return ""
 
 
-def _check_public_readme(skill_path: Path, report: AuditReport) -> None:
+def _public_readme_path(skill_path: Path) -> Path:
     readme = skill_path / "README.md"
+    if readme.is_file():
+        return readme
+    # 只在可证明的当前 Git 仓库边界中寻找共享首页。
+    for parent in (skill_path, *skill_path.parents):
+        if (parent / '.git').exists():
+            candidate = parent / 'README.md'
+            if candidate.is_file():
+                text = candidate.read_text(encoding='utf-8')
+                relative = (skill_path / 'SKILL.md').relative_to(parent).as_posix()
+                if relative in text or skill_path.name in text:
+                    return candidate
+            break
+    return readme
+
+
+def _check_public_readme(skill_path: Path, report: AuditReport) -> None:
+    readme = _public_readme_path(skill_path)
     if not readme.is_file():
         report.add("error", "readme.missing", "公开 Skill 缺少 README.md", "README.md")
         return
@@ -1091,7 +1114,7 @@ def audit_skill(
     else:
         report.metrics["host_coupling_mentions"] = 0
 
-    readme = path / "README.md"
+    readme = _public_readme_path(path)
     readme_text = ""
     if readme.is_file():
         readme_text = _read_text(readme, report, path) or ""

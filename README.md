@@ -2,7 +2,7 @@
   <img src="./assets/readme/hero.png" width="100%" alt="oil-skill-creator：像做产品一样写 Skill">
 </p>
 
-`oil-skill-creator` 用来创建、Review、整改和发布 Agent Skill。它关心的不只是说明有没有写完，而是这个 Skill 是否值得安装、能否稳定执行、是否适合能力较弱的模型，以及效果不好时能不能找到真正的设计原因。
+创建、评审和改进 Skill，检查功能边界、首次配置、执行稳定性、兼容性与发布交付。
 
 > 静态校验通过，只能证明已知结构没有问题，不能证明一个 Skill 真的有用。
 

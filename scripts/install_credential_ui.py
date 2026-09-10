@@ -63,7 +63,7 @@ def install_credential_ui(
     }
     manifest_name = "manifests/default.json"
     files[manifest_name] = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-    hashes = {name: hashlib.sha256(data).hexdigest() for name, data in files.items() if name != manifest_name}
+    hashes = {name: hashlib.sha256(data).hexdigest() for name, data in files.items() if not name.startswith("manifests/")}
     record = {"version": 1, "files": hashes}
     if target.exists():
         try:

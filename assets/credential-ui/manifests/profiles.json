@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "profiles": {
+    "default": [{"manifest": "default.json", "env": "SERVICE_API_KEY"}]
+  }
+}

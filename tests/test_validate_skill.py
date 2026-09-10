@@ -56,6 +56,36 @@ def make_valid_skill(root: Path) -> Path:
 
 
 class ValidateSkillTests(unittest.TestCase):
+    def test_public_nested_skill_uses_referenced_repository_readme(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / '.git').mkdir()
+            skill = make_valid_skill(root / 'skills')
+            (skill / 'README.md').unlink()
+            (root / 'README.md').write_text(VALID_README + '\n入口：skills/sample-skill/SKILL.md\n')
+            report = audit_skill(skill, public=True)
+            self.assertNotIn('readme.missing', {item.code for item in report.errors})
+
+    def test_parent_readme_outside_repository_is_not_accepted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            skill = make_valid_skill(root)
+            (skill / 'README.md').unlink()
+            (root / 'README.md').write_text(VALID_README)
+            self.assertIn('readme.missing', {item.code for item in audit_skill(skill, public=True).errors})
+
+    def test_provider_name_and_optional_metadata_do_not_prove_host_dependency(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            skill = make_valid_skill(Path(temporary))
+            (skill / 'agents').mkdir()
+            (skill / 'assets').mkdir()
+            (skill / 'assets/openai.svg').write_text('<svg/>')
+            (skill / 'agents/openai.yaml').write_text('interface: {}\n')
+            with (skill / 'SKILL.md').open('a') as handle:
+                handle.write('\n可选服务为 OpenAI API，示例产品名为 Claude Code。\n')
+            report = audit_skill(skill, universal=True)
+            self.assertFalse([item for item in report.errors if item.code.startswith('compatibility.host')])
+
     def test_valid_public_skill_passes_strict(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             skill = make_valid_skill(Path(temporary))

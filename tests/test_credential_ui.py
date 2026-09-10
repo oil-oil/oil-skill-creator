@@ -30,7 +30,10 @@ class CredentialUiTests(unittest.TestCase):
             data = json.loads(manifest.read_text(encoding="utf-8"))
             data["ui"]["title"] = "自定义标题"
             manifest.write_text(json.dumps(data), encoding="utf-8")
+            profiles = target / "manifests/profiles.json"
+            profiles.write_text(json.dumps({"version": 1, "profiles": {"custom": [{"manifest": "default.json", "env": "CUSTOM_API_KEY"}]}}))
             again = install_credential_ui(root, "sample-skill", "服务凭据", "sample/service/default")
+            self.assertIn("CUSTOM_API_KEY", profiles.read_text())
             self.assertEqual(again["status"], "unchanged")
             self.assertEqual(json.loads(manifest.read_text(encoding="utf-8"))["ui"]["title"], "自定义标题")
 

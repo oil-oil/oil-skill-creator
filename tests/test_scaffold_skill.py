@@ -39,6 +39,27 @@ class ScaffoldSkillTests(unittest.TestCase):
             self.assertFalse(target.exists())
             self.assertIn(target / "SKILL.md", paths)
 
+    def test_optional_version_is_written_to_standard_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target, _ = create_skill(
+                temporary,
+                "versioned-skill",
+                "创建稳定结果。当用户需要该流程时使用；普通问答不要触发。",
+                version="0.1.0",
+            )
+            frontmatter = (target / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn('metadata:\n  version: "0.1.0"', frontmatter)
+
+    def test_rejects_invalid_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaises(ValueError):
+                create_skill(
+                    temporary,
+                    "invalid-version-skill",
+                    "创建稳定结果。当用户需要该流程时使用；普通问答不要触发。",
+                    version="v1.0",
+                )
+
     def test_refuses_to_overwrite_existing_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             existing = Path(temporary) / "existing-skill"

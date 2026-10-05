@@ -9,8 +9,10 @@ import sys
 from pathlib import Path
 
 try:
+    from .skill_version import is_semver
     from .validate_skill import NAME_RE
 except ImportError:  # 直接运行脚本时使用同目录导入。
+    from skill_version import is_semver
     from validate_skill import NAME_RE
 
 
@@ -18,7 +20,7 @@ ALLOWED_COMPONENTS = {"scripts", "references", "assets", "tests", "evals"}
 SKILL_TEMPLATE = """---
 name: {name}
 description: {description}
----
+{version_metadata}---
 
 # {name}
 
@@ -116,6 +118,7 @@ def create_skill(
     components: set[str] | None = None,
     public: bool = False,
     dry_run: bool = False,
+    version: str | None = None,
 ) -> tuple[Path, list[Path]]:
     if not NAME_RE.fullmatch(name) or len(name) > 64:
         raise ValueError("name 必须是 64 字符以内的 kebab-case")
@@ -123,6 +126,8 @@ def create_skill(
         raise ValueError("description 不能为空")
     if len(description) > 1024 or "<" in description or ">" in description:
         raise ValueError("description 不能超过 1024 字符或包含尖括号")
+    if version is not None and not is_semver(version):
+        raise ValueError("version 必须使用 MAJOR.MINOR.PATCH 格式，例如 0.1.0")
 
     component_set = set(components or set())
     unknown = sorted(component_set - ALLOWED_COMPONENTS)
@@ -139,7 +144,9 @@ def create_skill(
 
     target.mkdir(parents=True)
     skill_text = SKILL_TEMPLATE.format(
-        name=name, description=_render_description(description.strip())
+        name=name,
+        description=_render_description(description.strip()),
+        version_metadata=(f'metadata:\n  version: "{version}"\n' if version else ""),
     )
     (target / "SKILL.md").write_text(skill_text, encoding="utf-8", newline="\n")
 
@@ -179,6 +186,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="按需创建的逗号分隔组件：scripts,references,assets,tests,evals",
     )
     parser.add_argument("--public", action="store_true", help="同时生成 README.md")
+    parser.add_argument(
+        "--version",
+        help="可选的初始 SemVer 版本；写入 metadata.version，例如 0.1.0",
+    )
     parser.add_argument("--dry-run", action="store_true", help="只显示计划，不写入")
     parser.add_argument("--json", action="store_true", dest="as_json", help="输出 JSON")
     return parser
@@ -195,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
             components=components,
             public=args.public,
             dry_run=args.dry_run,
+            version=args.version,
         )
     except (ValueError, FileExistsError, OSError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

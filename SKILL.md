@@ -52,7 +52,7 @@ Review 默认只读，不创建快照、不修改、不打包。整改禁止用�
 <python> <oil-skill-creator>/scripts/scaffold_skill.py <skill-name> --output-root <目录> --description <描述> --public
 ```
 
-只通过 `--components` 添加当前确实需要的目录，例如 `--components scripts,tests`。不要为了示例完整而创建空资源。
+需要版本管理时，可传 `--version 0.1.0` 在 `metadata.version` 写入初始版本。只通过 `--components` 添加当前确实需要的目录，例如 `--components scripts,tests`。不要为了示例完整而创建空资源。
 
 ## Review 与整改路径
 
@@ -126,6 +126,8 @@ Skill 不得包含与 description 不一致的隐藏行为、误导能力、越�
 
 `--weak-model` 使用更严格的结构限制；`--universal` 检查通用 Skill 是否写死了宿主品牌或专属路径。
 
+如果 Skill 使用 `metadata.version` 管理 SemVer，校验器会检查它是否为 `MAJOR.MINOR.PATCH` 格式。首次设置和后续升版使用 [版本管理](references/versioning.md) 中的脚本；默认只预览，确认后再加 `--write`。
+
 ## 效果评估
 
 当用户要求证明效果、整改涉及难以从静态检查确认的重大行为变化，或准备正式发布并需要效果证据时，先读 [评估规范](references/evaluation.md)。创建模式与普通 Agent 比较；整改模式在需要前后对照时与写入前的 `skill-snapshot` 比较。明确的小范围规则修正可以用静态校验和针对性回归完成，不强制建立效果对照。
@@ -155,6 +157,8 @@ Skill 不得包含与 description 不一致的隐藏行为、误导能力、越�
 ## 兼容与发布
 
 发布前读 [兼容性](references/compatibility.md) 和 [GitHub 发布](references/publishing.md)。README 面向使用者，说明价值、安装、配置、兼容范围、数据边界和输出，不复制 Agent 的内部执行步骤。GitHub 安装部分同时提供“把仓库地址交给 Agent”和 `npx skills add` 两个入口。
+
+Skill 版本只记录在源 Skill 的 `metadata.version`；集合仓库通过 Git submodule commit 锁定来源，插件版本单独记录集合自身的变化。版本号和 Git 标签的维护方式见 [版本管理](references/versioning.md)。
 
 严格校验通过后打包：
 

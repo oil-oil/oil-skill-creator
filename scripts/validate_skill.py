@@ -18,8 +18,10 @@ from typing import Iterable
 
 try:
     from .evaluation_common import validate_eval_set
+    from .skill_version import read_skill_version
 except ImportError:
     from evaluation_common import validate_eval_set
+    from skill_version import read_skill_version
 
 
 ALLOWED_FRONTMATTER_KEYS = {
@@ -1005,6 +1007,11 @@ def audit_skill(
     except ValueError as exc:
         report.add("error", "frontmatter.invalid", str(exc), "SKILL.md", 1)
         return report
+
+    try:
+        read_skill_version(raw)
+    except ValueError as exc:
+        report.add("error", "frontmatter.version-invalid", str(exc), "SKILL.md", 1)
 
     report.metrics.update(
         {

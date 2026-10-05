@@ -87,7 +87,7 @@
 ## 维护原则
 
 - SKILL.md、references 和 README 只描述当前有效状态。
-- 版本历史放 Git 提交、Release notes 或外部 workspace。
+- Skill 采用 `metadata.version` 时，按 [版本管理](versioning.md) 维护；历史放 Git 提交、标签、Release notes 或外部 workspace。
 - 每次修复先归因；确定、重复的问题才补校验或脚本，语义问题改流程和判断原则，偶发个案不写入 Skill。
 - 不为了保留历史兼容而无限增加正文分支；可程序迁移的交给程序。
 - 删除不再产生价值的规则，防止 Token 和维护成本持续增长。

@@ -4,7 +4,7 @@ description: 创建、评审、整改和发布 Skill。用户想从零创建 Ski
 license: MIT
 compatibility: 核心脚本只使用 Python 3 标准库；可选凭据输入页需要 Node.js 22.18+ 和系统凭据服务，已验证 macOS，Windows 与 Linux 待实机验证；独立效果评估需要隔离执行能力。
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
 ---
 
 # oil-skill-creator
@@ -93,7 +93,7 @@ description 先讲用户能完成的任务、得到的产物和适用边界，�
 
 ### 信息架构
 
-拆分文件前读 [信息架构](references/information-architecture.md)。主流程放 `SKILL.md`，阶段细节放 `references/`，结果固定的步骤放 `scripts/`，运行结果和 Review 记录放 Skill 外部。
+拆分文件前读 [信息架构](references/information-architecture.md)。主流程放 `SKILL.md`，阶段细节放 `references/`，结果固定的步骤放 `scripts/`，运行结果和 Review 记录放 Skill 外部。长参考资料需排查互斥分支并配置目录导航（TOC）。
 
 目标 Skill 会生成难以一次完成或局部修改的大型产物，或者需要复杂配置、反复预览和人工调整时，按 [产品设计](references/product-design.md) 设计分段产出或可复用操作页面。
 

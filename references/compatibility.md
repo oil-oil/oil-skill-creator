@@ -1,6 +1,6 @@
 # 兼容性与运行边界
 
-本文件用于设计和 Review 目标 Skill，规定跨平台与凭据边界。需要本地单行密钥输入时，可按 [凭据输入页接入](credential-ui.md) 使用随附的可选组件；它不代替业务程序的权限隔离、OAuth 或远程凭据服务。
+本文件用于设计和 Review 目标 Skill 的平台、宿主、配置与凭据边界。
 
 ## 需要检查的兼容范围
 
@@ -67,7 +67,7 @@ JSON、YAML 和普通配置文件只保存非敏感设置与凭据引用，例�
 按以下顺序选择凭据来源：
 
 1. 复用目标环境已经提供的安全凭据能力；
-2. 桌面环境通过成熟适配器使用 macOS Keychain、Windows Credential Manager 或 Linux Secret Service；
+2. 桌面环境通过成熟适配器使用 macOS Keychain、Windows Credential Manager 或 Linux Secret Service，需要用户输入单行密钥时接入 [凭据输入页](credential-ui.md)；
 3. CI、容器或无界面环境使用运行时环境变量；
 4. 没有安全存储时停止并说明限制，不静默降级为明文文件。
 

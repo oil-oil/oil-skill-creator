@@ -11,7 +11,7 @@ metadata:
   version: "1.2.3"
 ```
 
-版本必须是字符串，使用 `MAJOR.MINOR.PATCH` 三段格式。保持 `metadata` 为多行映射；升版工具不会改写非空的内联 YAML 映射，以免丢失其他元数据。
+版本必须是字符串，使用 `MAJOR.MINOR.PATCH` 三段格式，`validate_skill.py` 会检查格式。保持 `metadata` 为多行映射；升版工具不会改写非空的内联 YAML 映射，以免丢失其他元数据。
 
 `metadata.version` 是 Skill 作者约定的版本信息，不会自动让任何安装器固定或切换版本。具体安装器是否支持版本选择，需要单独验证。
 

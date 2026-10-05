@@ -12,7 +12,11 @@ FRONTMATTER_RE = re.compile(
     r"\A---[ \t]*\r?\n(?P<yaml>.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL
 )
 TOP_LEVEL_KEY_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):(?:[ \t]*(.*))?$")
-VERSION_KEY_RE = re.compile(r"^  version:[ \t]*(.*)$")
+VERSION_KEY_RE = re.compile(r"^(?P<indent> +)version:[ \t]*(?P<value>.*)$")
+# 按行读取版本的发版和更新脚本用的就是这两条规则；能被它们读到的写法才算有效。
+LINE_NAME_RE = re.compile(r'^name:\s*"?([\w-]+)"?\s*$', re.MULTILINE)
+LINE_VERSION_RE = re.compile(r'^\s+version:\s*"?(\d+\.\d+\.\d+)"?\s*$', re.MULTILINE)
+STANDARD_FORM = '请写成多行映射：metadata 下一行 version: "1.2.3"，用双引号或不加引号，行尾不加注释'
 
 
 def is_semver(value: str) -> bool:
@@ -32,7 +36,7 @@ def _top_level_key(line: str) -> tuple[str, str] | None:
 
 def _metadata_version_line(
     lines: list[str],
-) -> tuple[int | None, int | None, int | None]:
+) -> tuple[int | None, int | None, int | None, str]:
     metadata_indices = [
         index
         for index, line in enumerate(lines)
@@ -41,26 +45,17 @@ def _metadata_version_line(
     if len(metadata_indices) > 1:
         raise ValueError("frontmatter 中出现了多个 metadata 字段")
     if not metadata_indices:
-        return None, None, None
+        return None, None, None, "  "
 
     metadata_index = metadata_indices[0]
     _, inline_value = _top_level_key(lines[metadata_index]) or ("metadata", "")
     if inline_value and not inline_value.startswith("#"):
         if inline_value == "{}":
-            return metadata_index, metadata_index + 1, None
-        # Inline YAML is valid, but changing it safely needs a YAML parser. Do not
-        # guess its structure or rewrite unrelated metadata.
-        if inline_value.startswith("{") and re.search(
-            r"(?:\{|,)\s*version\s*:", inline_value
-        ):
-            version_match = re.search(
-                r"(?:\{|,)\s*version\s*:\s*(['\"]?)([^,}\s'\"]+)\1\s*(?=[,}])",
-                inline_value,
-            )
-            if not version_match:
-                raise ValueError("metadata.version 不是有效的 SemVer 字符串")
-            return metadata_index, metadata_index + 1, -1
-        return metadata_index, metadata_index + 1, None
+            return metadata_index, metadata_index + 1, None, "  "
+        if re.search(r"(?:\{|,)\s*version\s*:", inline_value):
+            raise ValueError(f"metadata.version 不能写在单行映射里；{STANDARD_FORM}")
+        # 其他单行映射是合法 YAML，但安全改写需要完整解析器，不猜它的结构。
+        return metadata_index, metadata_index + 1, None, "  "
 
     end_index = len(lines)
     for index in range(metadata_index + 1, len(lines)):
@@ -68,14 +63,27 @@ def _metadata_version_line(
             end_index = index
             break
 
-    version_indices = [
-        index
-        for index in range(metadata_index + 1, end_index)
-        if VERSION_KEY_RE.match(lines[index])
-    ]
+    # metadata 的直接子项沿用第一个子项的缩进，更深的缩进属于嵌套字段。
+    child_indent = None
+    version_indices = []
+    for index in range(metadata_index + 1, end_index):
+        line = lines[index]
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        indent = line[: len(line) - len(line.lstrip(" "))]
+        if child_indent is None:
+            child_indent = indent
+        match = VERSION_KEY_RE.match(line)
+        if match and match.group("indent") == child_indent:
+            version_indices.append(index)
     if len(version_indices) > 1:
         raise ValueError("metadata 中出现了多个 version 字段")
-    return metadata_index, end_index, version_indices[0] if version_indices else None
+    return (
+        metadata_index,
+        end_index,
+        version_indices[0] if version_indices else None,
+        child_indent or "  ",
+    )
 
 
 def _decode_version_scalar(line: str) -> str:
@@ -83,19 +91,17 @@ def _decode_version_scalar(line: str) -> str:
     if not match:
         raise ValueError("metadata.version 必须是字符串")
 
-    value = match.group(1).strip()
-    if value.startswith('"'):
-        quoted = re.fullmatch(r'"([^"\\]*)"(?:[ \t]+#.*)?', value)
-        if not quoted:
-            raise ValueError("metadata.version 必须是简单的 YAML 字符串")
-        return quoted.group(1)
+    value = match.group("value").strip()
     if value.startswith("'"):
-        quoted = re.fullmatch(r"'([^']*)'(?:[ \t]+#.*)?", value)
+        raise ValueError(f"metadata.version 不能用单引号；{STANDARD_FORM}")
+    if re.search(r"[ \t]#", value):
+        raise ValueError(f"metadata.version 行尾不能加注释；{STANDARD_FORM}")
+    if value.startswith('"'):
+        quoted = re.fullmatch(r'"([^"\\]*)"', value)
         if not quoted:
-            raise ValueError("metadata.version 必须是简单的 YAML 字符串")
+            raise ValueError(f"metadata.version 必须是简单的字符串；{STANDARD_FORM}")
         return quoted.group(1)
-
-    return re.sub(r"[ \t]+#.*$", "", value).strip()
+    return value
 
 
 def read_skill_version(raw: str) -> str | None:
@@ -104,24 +110,29 @@ def read_skill_version(raw: str) -> str | None:
         raise ValueError("SKILL.md 缺少有效的 YAML frontmatter")
 
     lines = _lines(match.group("yaml"))
-    metadata_index, _, version_index = _metadata_version_line(lines)
+    _, _, version_index, _ = _metadata_version_line(lines)
     if version_index is None:
         return None
-    if version_index == -1:
-        if metadata_index is None:
-            raise ValueError("metadata.version 无法解析")
-        inline = _top_level_key(lines[metadata_index])[1]
-        inline_match = re.search(
-            r"(?:\{|,)\s*version\s*:\s*(['\"]?)([^,}\s'\"]+)\1\s*(?=[,}])",
-            inline,
-        )
-        value = inline_match.group(2) if inline_match else ""
-    else:
-        value = _decode_version_scalar(lines[version_index])
-
+    value = _decode_version_scalar(lines[version_index])
     if not is_semver(value):
         raise ValueError("metadata.version 必须使用 MAJOR.MINOR.PATCH 格式，例如 1.2.3")
     return value
+
+
+def line_reader_problem(raw: str, name: str, version: str) -> str | None:
+    """检查按行读取的发版和更新脚本能否读到与 frontmatter 一致的名称和版本。"""
+    name_match = LINE_NAME_RE.search(raw)
+    if not name_match or name_match.group(1) != name:
+        return "按行读取的发版和更新脚本读不到 name；请写成 name: skill-name，用双引号或不加引号"
+    version_match = LINE_VERSION_RE.search(raw)
+    if not version_match:
+        return f"按行读取的发版和更新脚本读不到 metadata.version；{STANDARD_FORM}"
+    if version_match.group(1) != version:
+        return (
+            f"按行读取的发版和更新脚本会读到 {version_match.group(1)}，而不是 metadata.version 的 {version}；"
+            "把 metadata.version 放在 frontmatter 中第一个缩进的 version 字段"
+        )
+    return None
 
 
 def update_skill_version(raw: str, version: str, *, require_absent: bool) -> str:
@@ -140,18 +151,13 @@ def update_skill_version(raw: str, version: str, *, require_absent: bool) -> str
 
     yaml_text = match.group("yaml")
     lines = _lines(yaml_text)
-    metadata_index, metadata_end, version_index = _metadata_version_line(lines)
+    metadata_index, metadata_end, version_index, child_indent = _metadata_version_line(lines)
 
     newline = "\r\n" if "\r\n" in raw else "\n"
     if metadata_index is None:
         lines.extend(["metadata:", f'  version: "{version}"'])
-    elif version_index == -1:
-        raise ValueError("无法安全修改 metadata 内联映射；请先改成多行 YAML 映射")
     elif version_index is not None:
-        old_line = lines[version_index]
-        comment_match = re.search(r"[ \t]+(#.*)$", old_line)
-        comment = f" {comment_match.group(1)}" if comment_match else ""
-        lines[version_index] = f'  version: "{version}"{comment}'
+        lines[version_index] = f'{child_indent}version: "{version}"'
     else:
         _, inline_value = _top_level_key(lines[metadata_index]) or ("metadata", "")
         if inline_value == "{}":
@@ -159,7 +165,7 @@ def update_skill_version(raw: str, version: str, *, require_absent: bool) -> str
         elif inline_value and not inline_value.startswith("#"):
             raise ValueError("无法安全扩展 metadata 内联值；请先改成多行 YAML 映射")
         insert_at = metadata_end if metadata_end is not None else len(lines)
-        lines[insert_at:insert_at] = [f'  version: "{version}"']
+        lines[insert_at:insert_at] = [f'{child_indent}version: "{version}"']
 
     updated_yaml = newline.join(lines)
     return raw[: match.start("yaml")] + updated_yaml + raw[match.end("yaml") :]

@@ -118,7 +118,9 @@ body
                 encoding="utf-8",
             )
             report = audit_skill(skill)
-            self.assertNotIn("frontmatter.version-invalid", {item.code for item in report.errors})
+            codes = {item.code for item in report.errors}
+            self.assertNotIn("frontmatter.version-invalid", codes)
+            self.assertNotIn("frontmatter.version-unreadable", codes)
 
     def test_invalid_metadata_semver_is_an_error(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -133,6 +135,27 @@ body
             )
             report = audit_skill(skill)
             self.assertIn("frontmatter.version-invalid", {item.code for item in report.errors})
+
+    def test_version_must_be_readable_by_line_based_release_scripts(self) -> None:
+        cases = {
+            "inline": ('metadata: {version: "1.2.3"}', "frontmatter.version-invalid"),
+            "nested-first": (
+                'metadata:\n  requires:\n    version: "9.9.9"\n  version: "1.2.3"',
+                "frontmatter.version-unreadable",
+            ),
+        }
+        for name, (metadata, code) in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                skill = make_valid_skill(Path(temporary))
+                (skill / "SKILL.md").write_text(
+                    VALID_SKILL.replace(
+                        "compatibility: Python 3，支持 macOS、Windows 和 Linux。",
+                        f"{metadata}\ncompatibility: Python 3，支持 macOS、Windows 和 Linux。",
+                    ),
+                    encoding="utf-8",
+                )
+                report = audit_skill(skill)
+                self.assertIn(code, {item.code for item in report.errors})
 
     def test_broken_resource_is_an_error(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

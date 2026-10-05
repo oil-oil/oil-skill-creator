@@ -11,7 +11,7 @@ metadata:
   version: "1.2.3"
 ```
 
-版本必须是字符串，使用 `MAJOR.MINOR.PATCH` 三段格式，`validate_skill.py` 会检查格式。保持 `metadata` 为多行映射；升版工具不会改写非空的内联 YAML 映射，以免丢失其他元数据。
+版本使用 `MAJOR.MINOR.PATCH` 三段格式，写成多行映射，用双引号或不加引号，行尾不加注释。很多发版和更新脚本按行读取版本号，单行映射 `metadata: {version: "1.2.3"}`、单引号和行尾注释都会让它们读不到。`validate_skill.py` 会检查格式，并确认按行读取能得到同一个版本号。
 
 `metadata.version` 是 Skill 作者约定的版本信息，不会自动让任何安装器固定或切换版本。具体安装器是否支持版本选择，需要单独验证。
 
@@ -36,10 +36,8 @@ metadata:
 
 `--initial` 只适用于尚无版本的 Skill；`--bump` 要求已有有效版本，并自动将较低位归零。两种操作都不会覆盖 Skill 正文、自动提交 Git、创建标签或发布远端版本。写入后运行 Skill 校验和仓库自己的检查。
 
-## Git 标签与集合仓库
+## Git 标签与发布
 
-Skill 所在仓库是 Skill 内容的唯一来源。发布时先提交 Skill 和版本字段，再用仓库现有的标签命名规则创建对应 Git tag；没有既有规则时使用 `v<version>`。Release notes 放 GitHub Release 或单独的发布说明，不放入 `SKILL.md`。
-
-集合仓库的 Git submodule 指针记录源仓库的确切 commit，可复现其内容；它不取代 Skill 的 SemVer。集合插件的 `plugin.json` 版本只管理组合包自身，例如 Skill 清单、安装结构或集合能力的变化。更新 submodule 后，需要在集合仓库检查并记录新的 commit 指针，再决定是否发布新的集合版本。
+Skill 所在仓库是 Skill 内容的唯一来源。发布时先提交并推送 Skill 和版本字段，再创建 `v<版本号>` 标签，例如 `v1.2.3`。同一个版本号只发布一次；标签已经存在时，先升版再发布。更新说明放在 GitHub Release，不放进 `SKILL.md`。
 
 旧 Skill 尚无版本时，先查看当前功能成熟度、Git 历史和已有标签，再确定初始版本。没有历史标签时，新版本号只作为开始管理版本的基线，不代表过去已经发布过同号版本。

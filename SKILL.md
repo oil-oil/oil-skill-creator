@@ -3,6 +3,8 @@ name: oil-skill-creator
 description: 创建、评审、整改和发布 Skill。用户想从零创建 Skill、评审现有 Skill、检查它是否真正有用、修复触发或执行流程，或者改善首次使用、稳定性、Token 开销、文件分层、弱模型可读性与跨平台兼容性时使用。不要用于执行目标 Skill 负责的实际任务，也不要因为普通的编码、设计或写作请求触发。
 license: MIT
 compatibility: 核心脚本只使用 Python 3 标准库；可选凭据输入页需要 Node.js 22.18+ 和系统凭据服务，已验证 macOS，Windows 与 Linux 待实机验证；独立效果评估需要隔离执行能力。
+metadata:
+  version: "1.0.0"
 ---
 
 # oil-skill-creator

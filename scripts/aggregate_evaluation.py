@@ -74,6 +74,42 @@ def _read_timing(path: Path) -> tuple[float, float]:
     return tokens, duration
 
 
+def _read_execution(path: Path, run: dict[str, Any]) -> dict[str, Any]:
+    if not path.is_file():
+        raise ValueError(f"缺少 execution.json：{path}")
+    data = load_json(path)
+    if not isinstance(data, dict):
+        raise ValueError(f"execution.json 顶层必须是对象：{path}")
+    for field in ("model", "executor"):
+        actual = data.get(field)
+        if not isinstance(actual, str) or not actual.strip():
+            raise ValueError(f"execution.{field} 必须是非空字符串：{path}")
+        if actual.strip() != run.get(field):
+            raise ValueError(
+                f"execution.{field} 与 run_plan 不一致：{actual.strip()!r} != {run.get(field)!r}"
+            )
+    skill_hash = data.get("skill_hash")
+    if skill_hash is not None and (
+        not isinstance(skill_hash, str)
+        or len(skill_hash) != 64
+        or any(character not in "0123456789abcdef" for character in skill_hash)
+    ):
+        raise ValueError(f"execution.skill_hash 必须是 64 位小写 SHA-256 或 null：{path}")
+    configuration = run.get("configuration")
+    if configuration == "without_skill" and skill_hash is not None:
+        raise ValueError("without_skill 的 execution.skill_hash 必须为 null")
+    if configuration != "without_skill" and skill_hash is None:
+        raise ValueError(f"{configuration} 必须记录实际加载的 execution.skill_hash")
+    planned_hash = run.get("skill_hash")
+    if planned_hash is not None and skill_hash != planned_hash:
+        raise ValueError("execution.skill_hash 与 run_plan 不一致，Skill 内容可能在运行前后变化")
+    return {
+        "model": str(data["model"]).strip(),
+        "executor": str(data["executor"]).strip(),
+        "skill_hash": skill_hash,
+    }
+
+
 def aggregate_evaluation(
     iteration_path: str | Path,
     allow_incomplete: bool = False,
@@ -86,12 +122,28 @@ def aggregate_evaluation(
     configurations = plan.get("configurations")
     if not isinstance(configurations, list) or len(configurations) != 2:
         raise ValueError("run_plan.json 必须包含两个 configurations")
+    schema_version = plan.get("schema_version", 1)
+    if schema_version not in {1, 2}:
+        raise ValueError(f"不支持的 run_plan.schema_version：{schema_version}")
+    model = plan.get("model") if schema_version == 2 else None
+    executor = plan.get("executor") if schema_version == 2 else None
+    if schema_version == 2 and (
+        not isinstance(model, str)
+        or not model.strip()
+        or not isinstance(executor, str)
+        or not executor.strip()
+    ):
+        raise ValueError("schema 2 的 run_plan 必须记录非空 model 和 executor")
 
     run_results: list[dict[str, Any]] = []
     incomplete: list[str] = []
     for run in plan["runs"]:
         if not isinstance(run, dict):
             raise ValueError("run_plan.runs 项必须是对象")
+        if schema_version == 2 and (
+            run.get("model") != model or run.get("executor") != executor
+        ):
+            raise ValueError("run 的 model 或 executor 与本轮 run_plan 不一致，拒绝混合聚合")
         run_dir = Path(str(run.get("run_dir", ""))).expanduser().resolve()
         try:
             run_dir.relative_to(root)
@@ -108,6 +160,7 @@ def aggregate_evaluation(
             if not timing_path.is_file():
                 raise ValueError(f"缺少 timing.json：{timing_path}")
             tokens, duration = _read_timing(timing_path)
+            execution = _read_execution(run_dir / "execution.json", run) if schema_version == 2 else None
         except ValueError as exc:
             if not allow_incomplete:
                 raise
@@ -120,6 +173,9 @@ def aggregate_evaluation(
                 "eval_name": run.get("eval_name"),
                 "configuration": run.get("configuration"),
                 "repetition": run.get("repetition"),
+                "model": execution["model"] if execution else None,
+                "executor": execution["executor"] if execution else None,
+                "skill_hash": execution["skill_hash"] if execution else None,
                 "pass_rate": pass_rate,
                 "total_tokens": tokens,
                 "duration_seconds": duration,
@@ -132,8 +188,14 @@ def aggregate_evaluation(
         selected = [
             item for item in run_results if item["configuration"] == configuration
         ]
+        skill_hashes = {
+            item["skill_hash"] for item in selected if item["skill_hash"] is not None
+        }
+        if len(skill_hashes) > 1:
+            raise ValueError(f"{configuration} 在同一轮出现多个 Skill 内容摘要，拒绝混合聚合")
         summaries[str(configuration)] = {
             "runs": len(selected),
+            "skill_hash": next(iter(skill_hashes)) if skill_hashes else None,
             "pass_rate": summarize(
                 [item["pass_rate"] for item in selected if item["pass_rate"] is not None]
             ),
@@ -156,9 +218,11 @@ def aggregate_evaluation(
         )
 
     return {
-        "schema_version": 1,
+        "schema_version": schema_version,
         "skill_name": plan.get("skill_name"),
         "iteration": plan.get("iteration"),
+        "model": model,
+        "executor": executor,
         "configurations": summaries,
         "delta_primary_minus_baseline": delta,
         "runs": run_results,
@@ -177,13 +241,23 @@ def _format_metric(metric: dict[str, object], percent: bool = False) -> str:
 
 
 def render_markdown(benchmark: dict[str, Any]) -> str:
-    lines = [
-        f"# {benchmark.get('skill_name', 'Skill')} 效果对比",
-        "",
-        "| 配置 | 运行数 | 通过率 | 秒 | Token |",
-        "| --- | ---: | ---: | ---: | ---: |",
-    ]
+    lines = [f"# {benchmark.get('skill_name', 'Skill')} 效果对比", ""]
+    if benchmark.get("model"):
+        lines.extend(
+            [
+                f"模型：{benchmark['model']}",
+                f"执行者：{benchmark.get('executor') or '未记录'}",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "| 配置 | 运行数 | 通过率 | 秒 | Token | Skill SHA-256 |",
+            "| --- | ---: | ---: | ---: | ---: | --- |",
+        ]
+    )
     for name, summary in benchmark["configurations"].items():
+        skill_hash = summary.get("skill_hash")
         lines.append(
             "| "
             + " | ".join(
@@ -193,6 +267,7 @@ def render_markdown(benchmark: dict[str, Any]) -> str:
                     _format_metric(summary["pass_rate"], percent=True),
                     _format_metric(summary["duration_seconds"]),
                     _format_metric(summary["total_tokens"]),
+                    str(skill_hash)[:12] if skill_hash else "未记录",
                 ]
             )
             + " |"

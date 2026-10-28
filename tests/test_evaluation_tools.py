@@ -14,9 +14,10 @@ from tests.test_validate_skill import make_valid_skill
 from scripts.validate_skill import parse_frontmatter
 
 
-def write_eval_set(skill: Path) -> Path:
+def write_eval_set(skill: Path, count: int = 3) -> Path:
     eval_dir = skill / "evals"
-    eval_dir.mkdir(exist_ok=True)
+    eval_dir.mkdir(parents=True, exist_ok=True)
+    names = ["main-flow", "error-branch", "similar-boundary"]
     path = eval_dir / "evals.json"
     path.write_text(
         json.dumps(
@@ -24,13 +25,14 @@ def write_eval_set(skill: Path) -> Path:
                 "skill_name": "sample-skill",
                 "evals": [
                     {
-                        "id": 1,
-                        "name": "main-flow",
+                        "id": index,
+                        "name": names[index - 1],
                         "prompt": "执行主流程",
                         "expected_output": "生成结果文件",
                         "files": [],
                         "expectations": ["结果可用"],
                     }
+                    for index in range(1, count + 1)
                 ],
             },
             ensure_ascii=False,
@@ -70,6 +72,21 @@ def fill_runs(iteration: Path) -> None:
             + "\n",
             encoding="utf-8",
         )
+        if plan.get("schema_version") == 2:
+            skill_hash = run["skill_hash"]
+            if run["configuration"] == "with_skill" and skill_hash is None:
+                skill_hash = snapshot_skill(run["skill_path"], dry_run=True)["sha256"]
+            (run_dir / "execution.json").write_text(
+                json.dumps(
+                    {
+                        "model": run["model"],
+                        "executor": run["executor"],
+                        "skill_hash": skill_hash,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
         (run_dir / "outputs" / "result.txt").write_text(
             "可用结果\n" if passed else "基线结果\n", encoding="utf-8"
         )
@@ -105,14 +122,33 @@ class EvaluationToolsTests(unittest.TestCase):
             root = Path(temporary)
             skill = make_valid_skill(root)
             write_eval_set(skill)
-            created = prepare_evaluation(skill, "create", 1)
+            created = prepare_evaluation(
+                skill, "create", 1, model="model-a", executor="isolated-a"
+            )
             iteration = Path(str(created["iteration_path"]))
             self.assertTrue((iteration / "main-flow" / "with_skill").is_dir())
             self.assertTrue((iteration / "main-flow" / "without_skill").is_dir())
+            plan = json.loads((iteration / "run_plan.json").read_text(encoding="utf-8"))
+            self.assertEqual(plan["schema_version"], 2)
+            self.assertEqual(plan["model"], "model-a")
+            self.assertEqual(plan["executor"], "isolated-a")
+            current_run = next(
+                run for run in plan["runs"] if run["configuration"] == "with_skill"
+            )
+            self.assertEqual(
+                current_run["skill_hash"], snapshot_skill(skill, dry_run=True)["sha256"]
+            )
 
             workspace = root / "custom-workspace"
             snapshot_skill(skill, workspace=workspace)
-            improved = prepare_evaluation(skill, "improve", 1, workspace=workspace)
+            improved = prepare_evaluation(
+                skill,
+                "improve",
+                1,
+                workspace=workspace,
+                model="model-a",
+                executor="isolated-a",
+            )
             improved_iteration = Path(str(improved["iteration_path"]))
             plan = json.loads(
                 (improved_iteration / "run_plan.json").read_text(encoding="utf-8")
@@ -125,6 +161,175 @@ class EvaluationToolsTests(unittest.TestCase):
                 Path(old_run["skill_path"]).resolve(),
                 (workspace / "skill-snapshot").resolve(),
             )
+
+    def test_create_allows_evals_only_and_preserves_plan_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            skill = root / "sample-skill"
+            skill.mkdir()
+            write_eval_set(skill)
+            created = prepare_evaluation(
+                skill,
+                "create",
+                1,
+                model="model-a",
+                executor="isolated-a",
+                allow_missing_skill=True,
+            )
+            iteration = Path(str(created["iteration_path"]))
+            plan = json.loads((iteration / "run_plan.json").read_text(encoding="utf-8"))
+            current_run = next(
+                run for run in plan["runs"] if run["configuration"] == "with_skill"
+            )
+            self.assertIsNone(current_run["skill_hash"])
+            baseline_run = next(
+                run for run in plan["runs"] if run["configuration"] == "without_skill"
+            )
+            baseline_execution = Path(baseline_run["run_dir"]) / "execution.json"
+            baseline_execution.write_text(
+                json.dumps(
+                    {"model": "model-a", "executor": "isolated-a", "skill_hash": None}
+                ),
+                encoding="utf-8",
+            )
+            self.assertTrue(baseline_execution.is_file())
+            self.assertFalse((skill / "SKILL.md").exists())
+
+            make_valid_skill(root)
+            fill_runs(iteration)
+            _, _, benchmark = write_benchmark(iteration)
+            self.assertEqual(benchmark["model"], "model-a")
+            self.assertIsNotNone(benchmark["configurations"]["with_skill"]["skill_hash"])
+
+    def test_create_requires_three_evals_and_missing_skill_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            skill = root / "sample-skill"
+            skill.mkdir()
+            write_eval_set(skill, count=2)
+            with self.assertRaises(ValueError):
+                prepare_evaluation(
+                    skill,
+                    "create",
+                    1,
+                    model="model-a",
+                    executor="isolated-a",
+                    allow_missing_skill=True,
+                )
+            write_eval_set(skill)
+            with self.assertRaises(ValueError):
+                prepare_evaluation(
+                    skill, "create", 1, model="model-a", executor="isolated-a"
+                )
+            with self.assertRaises(ValueError):
+                prepare_evaluation(
+                    skill,
+                    "improve",
+                    1,
+                    model="model-a",
+                    executor="isolated-a",
+                    allow_missing_skill=True,
+                )
+
+    def test_execution_metadata_is_verified(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            skill = make_valid_skill(root)
+            write_eval_set(skill)
+            created = prepare_evaluation(
+                skill, "create", 1, model="model-a", executor="isolated-a"
+            )
+            iteration = Path(str(created["iteration_path"]))
+            for field in ("model", "executor"):
+                with self.subTest(field=field):
+                    fill_runs(iteration)
+                    plan = json.loads((iteration / "run_plan.json").read_text(encoding="utf-8"))
+                    run = next(
+                        item for item in plan["runs"] if item["configuration"] == "with_skill"
+                    )
+                    execution_path = Path(run["run_dir"]) / "execution.json"
+                    execution = json.loads(execution_path.read_text(encoding="utf-8"))
+                    execution[field] = "unexpected"
+                    execution_path.write_text(json.dumps(execution), encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        write_benchmark(iteration)
+            fill_runs(iteration)
+            plan_path = iteration / "run_plan.json"
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            current_run = next(
+                run for run in plan["runs"] if run["configuration"] == "with_skill"
+            )
+            execution_path = Path(current_run["run_dir"]) / "execution.json"
+            execution = json.loads(execution_path.read_text(encoding="utf-8"))
+            execution["skill_hash"] = "0" * 64
+            execution_path.write_text(json.dumps(execution), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                write_benchmark(iteration)
+
+            fill_runs(iteration)
+            plan["runs"][0]["model"] = "model-b"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                write_benchmark(iteration)
+
+            plan["runs"][0]["model"] = "model-a"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            fill_runs(iteration)
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            execution_path = Path(plan["runs"][0]["run_dir"]) / "execution.json"
+            execution_path.unlink()
+            with self.assertRaises(ValueError):
+                write_benchmark(iteration)
+
+    def test_models_stay_in_separate_iterations(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            skill = make_valid_skill(root)
+            write_eval_set(skill)
+            benchmarks = []
+            for iteration_number, model in ((1, "model-a"), (2, "model-b")):
+                created = prepare_evaluation(
+                    skill,
+                    "create",
+                    iteration_number,
+                    model=model,
+                    executor="isolated-a",
+                )
+                iteration = Path(str(created["iteration_path"]))
+                fill_runs(iteration)
+                _, _, benchmark = write_benchmark(iteration)
+                benchmarks.append(benchmark)
+                self.assertEqual(benchmark["model"], model)
+                self.assertEqual(
+                    {run["model"] for run in benchmark["runs"]}, {model}
+                )
+            self.assertEqual(
+                [benchmark["model"] for benchmark in benchmarks], ["model-a", "model-b"]
+            )
+
+    def test_schema_one_remains_aggregateable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            skill = make_valid_skill(root)
+            write_eval_set(skill)
+            created = prepare_evaluation(
+                skill, "create", 1, model="model-a", executor="isolated-a"
+            )
+            iteration = Path(str(created["iteration_path"]))
+            plan_path = iteration / "run_plan.json"
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            plan["schema_version"] = 1
+            for run in plan["runs"]:
+                run.pop("model")
+                run.pop("executor")
+                run.pop("skill_hash")
+            plan.pop("model")
+            plan.pop("executor")
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            fill_runs(iteration)
+            _, _, benchmark = write_benchmark(iteration)
+            self.assertEqual(benchmark["schema_version"], 1)
+            self.assertIsNone(benchmark["model"])
 
     def test_improve_rejects_changed_snapshot(self) -> None:
         operations = {
@@ -145,14 +350,23 @@ class EvaluationToolsTests(unittest.TestCase):
                 payload = snapshot_skill(skill, workspace=workspace)
                 mutate(Path(str(payload["snapshot"])))
                 with self.assertRaises(ValueError):
-                    prepare_evaluation(skill, "improve", 1, workspace=workspace)
+                    prepare_evaluation(
+                        skill,
+                        "improve",
+                        1,
+                        workspace=workspace,
+                        model="model-a",
+                        executor="isolated-a",
+                    )
 
     def test_aggregate_and_blind_review(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             skill = make_valid_skill(root)
             write_eval_set(skill)
-            created = prepare_evaluation(skill, "create", 1)
+            created = prepare_evaluation(
+                skill, "create", 1, model="model-a", executor="isolated-a"
+            )
             iteration = Path(str(created["iteration_path"]))
             fill_runs(iteration)
             _, _, benchmark = write_benchmark(iteration)
@@ -162,6 +376,7 @@ class EvaluationToolsTests(unittest.TestCase):
             review, manifest = generate_review(iteration)
             html = review.read_text(encoding="utf-8")
             self.assertIn("候选 A", html)
+            self.assertIn("model-a", html)
             self.assertNotIn("with_skill", html)
             self.assertIn("+'\\n'", html)
             self.assertIn("localStorage", html)
@@ -169,6 +384,7 @@ class EvaluationToolsTests(unittest.TestCase):
             self.assertIn("data:image/png;base64", html)
             mapping = json.loads(manifest.read_text(encoding="utf-8"))
             self.assertTrue(mapping["blind"])
+            self.assertEqual(mapping["model"], "model-a")
             self.assertEqual(set(mapping["candidates"]), {"with_skill", "without_skill"})
 
     def test_trigger_score_reports_false_positive(self) -> None:

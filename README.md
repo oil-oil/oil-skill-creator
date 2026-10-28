@@ -86,6 +86,10 @@ description 写清该接哪些请求、不该接哪些相似请求。需要时�
 
 目标 Skill 需要在本机输入 API Key 时，可以装上随附的[凭据输入页](references/credential-ui.md)：一个页面填 1 到 16 个 Key，密钥存进系统凭据库（macOS 钥匙串、Windows 凭据管理器或 Linux Secret Service），不经过聊天，也不写进配置文件。已有安全入口时优先复用；OAuth、CI 和远程服务器另按实际需求设计。
 
+### 想为 Skill 收费
+
+先判断值不值得收费，再规划免费版和付费版怎么分、怎样从 GitHub 和落地页引流、怎么收款和交付、更新怎么提示才不打扰用户也不像恶意软件。这些来自一套真实运行的付费 Skill 链路，见[商业化](references/monetization.md)。想看实际效果，可以参考 [ui.oiloil.org](https://ui.oiloil.org) 的产品页和账户页，以及开源命令行工具 [oil-cli](https://github.com/oil-oil/oil-cli)。
+
 ### 弱模型能否看懂、Token 花在哪
 
 检查入口、模式、术语、分支位置和资源读取时机。主文件只保留主流程，阶段细节按需读取，同一规则只写在一处。
@@ -114,15 +118,17 @@ description 写清该接哪些请求、不该接哪些相似请求。需要时�
 
 ## 效果评估
 
-创建模式比较“使用 Skill”和“普通 Agent”；整改需要证明效果时，比较当前版本和写入前快照。程序负责准备固定目录、检查数据格式和聚合结果，子 Agent 等隔离执行环境分别运行两边，审美、文案和整体体验由人来判断。
+创建模式先准备至少 3 条真实评估并运行“普通 Agent”基线，再编写最小 Skill 和对照；整改需要证明效果时，比较当前版本和写入前快照。程序负责准备固定目录、检查数据格式和聚合结果，子 Agent 等隔离执行环境分别运行两边，审美、文案和整体体验由人来判断。
+
+每轮固定一个模型和执行者；需要验证多个模型时使用不同的 `iteration-N`，不混合汇总。目标目录还只有 `evals/evals.json` 时，create 模式可加 `--allow-missing-skill`，候选完成后沿用同一计划。
 
 ```text
-<python> scripts/prepare_evaluation.py <skill-path> --mode create --iteration 1
+<python> scripts/prepare_evaluation.py <skill-path> --mode create --iteration 1 --model <模型> --executor <隔离执行者> --allow-missing-skill
 <python> scripts/aggregate_evaluation.py <iteration-path>
 <python> scripts/generate_review.py <iteration-path>
 ```
 
-没有子 Agent 或等价的隔离执行能力时，仍可完成静态 Review、程序测试和作者试跑，但不能宣称已经完成独立对照。
+schema 2 的每次运行还要在对应 `run-N/` 保存 `execution.json`，记录实际 `model`、`executor` 和 `skill_hash`；可用 `snapshot_skill.py <skill-path> --dry-run --json` 获取内容摘要。没有子 Agent 或等价的隔离执行能力时，仍可完成静态 Review、程序测试和作者试跑，但不能宣称已经完成独立对照。
 
 ## 兼容性
 

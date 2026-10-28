@@ -72,6 +72,12 @@
 
 ## 打包边界
 
+严格校验通过后打包：
+
+```text
+<python> <oil-skill-creator>/scripts/package_skill.py <skill-path> --public --strict --weak-model --universal
+```
+
 `.skill` 发布包默认排除：
 
 - `.git/`；

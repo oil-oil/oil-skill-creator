@@ -219,14 +219,19 @@ def build_review_data(root: Path, reveal: bool = False) -> tuple[dict[str, Any],
                     }
                 )
 
+    title = f"{plan.get('skill_name', 'Skill')} · iteration-{plan.get('iteration')}"
+    if plan.get("schema_version") == 2:
+        title += f" · {plan.get('model')}"
     data = {
-        "title": f"{plan.get('skill_name', 'Skill')} · iteration-{plan.get('iteration')}",
+        "title": title,
         "evals": list(grouped.values()),
         "benchmark": benchmark_rows,
     }
     manifest = {
         "schema_version": 1,
         "blind": not reveal,
+        "model": plan.get("model"),
+        "executor": plan.get("executor"),
         "candidates": labels,
         "runs": manifest_runs,
     }

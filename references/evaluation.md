@@ -36,7 +36,7 @@
 }
 ```
 
-先准备 2–3 个真实请求，覆盖主流程、容易出错的分支和相似任务边界。能够明确检查的要求写入 `expectations`，不要改用其他字段。主观偏好写成人工评审问题，不要伪装成程序要求。
+创建模式先准备至少 3 个真实请求，覆盖主流程、容易出错的分支和相似任务边界，再开始大量编写 Skill。能够明确检查的要求写入 `expectations`，不要改用其他字段。主观偏好写成人工评审问题，不要伪装成程序要求。
 
 ## 按需固定比较基线
 
@@ -44,16 +44,18 @@
 - 整改现有 Skill：基线是 `old_skill`，只加载第一次编辑前用 `scripts/snapshot_skill.py` 保存的 `skill-snapshot`。
 - 当前版本统一命名为 `with_skill`。
 
-不允许用正在编辑的目录充当旧版本，也不允许完成修改后再补快照。
+创建模式先运行 `without_skill`，再大量编写候选 Skill。可以使用最小骨架固定目录和元数据，但不能先写完整规则再补基线。不允许用正在编辑的目录充当旧版本，也不允许完成修改后再补快照。
 
 ## 准备评估目录
 
-在目标 Skill 目录中运行：
+每轮固定一个模型和一个实际执行者。在目标 Skill 目录中运行：
 
 ```text
-<python> <oil-skill-creator>/scripts/prepare_evaluation.py . --mode create --iteration 1
-<python> <oil-skill-creator>/scripts/prepare_evaluation.py . --mode improve --iteration 1
+<python> <oil-skill-creator>/scripts/prepare_evaluation.py . --mode create --iteration 1 --model <模型> --executor <隔离执行者>
+<python> <oil-skill-creator>/scripts/prepare_evaluation.py . --mode improve --iteration 1 --model <模型> --executor <隔离执行者>
 ```
+
+create 模式至少需要 3 条评估。目录还只有 `evals/evals.json` 时增加 `--allow-missing-skill`，从 eval 集的 `skill_name` 确定目标名称；候选完成后沿用同一计划，不重新创建 iteration。需要验证多个模型时，每个模型使用不同的 `iteration-N`，报告分别生成，不把不同模型的结果混合平均。
 
 `improve` 模式会检查外部 workspace 中的 `skill-snapshot`。Skill 位于名为 `skills` 的扫描目录时，默认 workspace 是该目录同级的 `skill-workspaces/<skill-name>-workspace/`，避免快照被识别成重复 Skill。每轮使用一个新的 `iteration-N` 目录，程序拒绝覆盖已有目录，并生成下面的结构：
 
@@ -65,9 +67,13 @@
     └── <eval-name>/
         ├── eval_metadata.json
         ├── with_skill/
-        │   └── run-1/outputs/
+        │   └── run-1/
+        │       ├── execution.json
+        │       └── outputs/
         └── without_skill/         # 创建模式
-            └── run-1/outputs/
+            └── run-1/
+                ├── execution.json
+                └── outputs/
 ```
 
 整改模式将 `without_skill` 替换为 `old_skill`。需要测量波动时通过 `--repetitions` 创建多次运行，不要手工复制目录。
@@ -83,9 +89,21 @@
 
 不能并发运行时可以依次执行，但必须保持计划和环境一致，并在结果中说明这一限制。
 
-## 记录耗时、Token 和客观结果
+## 记录执行、耗时、Token 和客观结果
 
-每个 `run-N/` 保存 `timing.json`：
+schema 2 的每个 `run-N/` 保存 `execution.json`，记录实际运行而不是只重复计划：
+
+```json
+{
+  "model": "实际模型标识",
+  "executor": "实际隔离执行者",
+  "skill_hash": "实际加载 Skill 的 64 位 SHA-256；without_skill 为 null"
+}
+```
+
+可用 `<python> <oil-skill-creator>/scripts/snapshot_skill.py <skill-path> --dry-run --json` 获取当前 Skill 的内容摘要，该命令不写入快照。评估前置时计划中的候选摘要为 null，实际运行后必须补齐；同一配置出现不同摘要时拒绝聚合。
+
+每个 `run-N/` 还要保存 `timing.json`：
 
 ```json
 {
@@ -116,7 +134,7 @@
 <python> <oil-skill-creator>/scripts/generate_review.py <iteration-path>
 ```
 
-聚合程序生成 `benchmark.json` 和 `benchmark.md`。这两份文件记录通过率、耗时、Token 的平均值、波动和基线差异。程序还会生成本地 `review.html` 评审页，但不会自动打开浏览器；页面可以导出 `feedback.json`。
+聚合程序生成 `benchmark.json` 和 `benchmark.md`。这些文件记录模型、执行者、Skill 摘要，以及通过率、耗时、Token 的平均值、波动和基线差异。schema 1 旧计划仍可聚合，但不能据此声称已验证模型。程序还会生成本地 `review.html` 评审页，但不会自动打开浏览器；页面可以导出 `feedback.json`。
 
 先向用户展示候选结果、证据和对比报告，再停止等待反馈。没有图形界面时，在对话中按同一顺序展示，并把用户意见整理成 `feedback.json`。收到反馈前不要继续修改 Skill。
 

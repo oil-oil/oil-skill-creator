@@ -85,7 +85,7 @@ Review 只读：不修改文件、不创建快照、不打包。用户看完报�
 
 | 要解决的问题 | 参考 |
 | --- | --- |
-| 首次使用、配置、确认操作、失败恢复；大型产物分段产出或可复用操作页面 | [产品设计](references/product-design.md) |
+| 首次使用、配置、确认操作、失败恢复；阶段完成后提示下一步；大型产物分段产出或可复用操作页面 | [产品设计](references/product-design.md) |
 | 批量、破坏性、复杂校验或高代价操作 | [计划、校验与执行](references/plan-validate-execute.md) |
 | 宿主依赖、平台差异、普通配置与凭据存储 | [兼容性](references/compatibility.md) |
 | 本机需要输入 API Key 等单行凭据，且没有现成安全入口 | [凭据输入页](references/credential-ui.md)，用安装脚本接入随附组件，不为每个 Skill 重新生成页面 |

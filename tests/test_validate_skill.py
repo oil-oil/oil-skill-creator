@@ -526,6 +526,31 @@ CONFIG = Path(os.environ.get("SAMPLE_SKILL_CONFIG", Path.home() / ".sample-skill
                 {item.code for item in report.errors},
             )
 
+    def test_verbose_description_emits_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            skill = make_valid_skill(Path(temporary))
+            long_zh = "设计复杂业务界面与工作流。" + ("覆盖多种细节说明与方法步骤" * 16) + "当用户需要时使用；普通问答不要触发。"
+            (skill / "SKILL.md").write_text(
+                f"---\nname: sample-skill\ndescription: {long_zh}\n---\n\n# sample-skill\n\n## 主流程\n\n1. 先读取输入。\n2. 生成结果并停止。\n",
+                encoding="utf-8",
+            )
+            report = audit_skill(skill)
+            self.assertIn(
+                "frontmatter.description-verbose",
+                {item.code for item in report.warnings},
+            )
+
+            long_en = "Design interactive workflows. " + ("detailed implementation steps " * 11) + "Use when designing UX; do not trigger for backend."
+            (skill / "SKILL.md").write_text(
+                f"---\nname: sample-skill\ndescription: {long_en}\n---\n\n# sample-skill\n\n## 主流程\n\n1. 先读取输入。\n2. 生成结果并停止。\n",
+                encoding="utf-8",
+            )
+            en_report = audit_skill(skill)
+            self.assertIn(
+                "frontmatter.description-verbose",
+                {item.code for item in en_report.warnings},
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

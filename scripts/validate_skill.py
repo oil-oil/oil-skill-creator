@@ -1068,6 +1068,16 @@ def audit_skill(
                 "description 超过 1024 个字符",
                 "SKILL.md",
             )
+        else:
+            cjk_count = sum(1 for ch in description if "\u4e00" <= ch <= "\u9fff")
+            soft_limit = 180 if cjk_count >= len(description) * 0.3 else 320
+            if len(description) > soft_limit:
+                report.add(
+                    "warning",
+                    "frontmatter.description-verbose",
+                    f"description 共 {len(description)} 个字符，超过推荐上限 {soft_limit}；它每轮都会常驻系统上下文，只保留核心能力、触发信号与排除边界，不写实现步骤或修饰语",
+                    "SKILL.md",
+                )
         if "<" in description or ">" in description:
             report.add(
                 "error",

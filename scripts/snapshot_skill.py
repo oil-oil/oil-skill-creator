@@ -64,6 +64,14 @@ def _digest(skill_path: Path, files: list[Path]) -> str:
     return checksum.hexdigest()
 
 
+def skill_digest(skill_path: str | Path) -> str:
+    """只计算 Skill 内容摘要，不读取也不检查任何 workspace。"""
+    source = Path(skill_path).expanduser().resolve()
+    if not source.is_dir():
+        raise ValueError(f"Skill 目录不存在：{source}")
+    return _digest(source, _included_files(source))
+
+
 def verify_snapshot(workspace: str | Path) -> dict[str, object]:
     workspace_path = Path(workspace).expanduser().resolve()
     destination = workspace_path / "skill-snapshot"
@@ -106,7 +114,9 @@ def snapshot_skill(
     )
     destination = workspace_path / "skill-snapshot"
     metadata = workspace_path / "snapshot.json"
-    if destination.exists() or metadata.exists():
+    snapshot_exists = destination.exists() or metadata.exists()
+    # dry-run 只用于预览和取摘要；整改期间快照必然已存在，不能因此报错。
+    if snapshot_exists and not dry_run:
         raise FileExistsError(f"快照已存在，拒绝覆盖：{destination}")
 
     files = _included_files(source)
@@ -118,6 +128,7 @@ def snapshot_skill(
         "sha256": _digest(source, files),
     }
     if dry_run:
+        payload["snapshot_exists"] = snapshot_exists
         return payload
 
     workspace_path.mkdir(parents=True, exist_ok=True)
@@ -160,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{status}：{payload['snapshot']}")
         print(f"文件数：{payload['files']}")
         print(f"SHA-256：{payload['sha256']}")
+        if payload.get("snapshot_exists"):
+            print("注意：快照已存在，正式运行会拒绝覆盖")
     return 0
 
 

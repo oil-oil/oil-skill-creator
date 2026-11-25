@@ -10,11 +10,11 @@ from pathlib import Path
 
 try:
     from .evaluation_common import validate_eval_set
-    from .snapshot_skill import default_workspace, snapshot_skill, verify_snapshot
+    from .snapshot_skill import default_workspace, skill_digest, verify_snapshot
     from .validate_skill import parse_frontmatter
 except ImportError:
     from evaluation_common import validate_eval_set
-    from snapshot_skill import default_workspace, snapshot_skill, verify_snapshot
+    from snapshot_skill import default_workspace, skill_digest, verify_snapshot
     from validate_skill import parse_frontmatter
 
 
@@ -93,9 +93,7 @@ def build_evaluation_plan(
             raise ValueError(
                 f"整改评估需要完整的写入前快照；先运行 snapshot_skill.py。{exc}"
             ) from exc
-    current_hash = (
-        str(snapshot_skill(skill, dry_run=True)["sha256"]) if skill_md.is_file() else None
-    )
+    current_hash = skill_digest(skill) if skill_md.is_file() else None
 
     iteration_path = workspace_path / f"iteration-{iteration}"
     baseline = "without_skill" if mode == "create" else "old_skill"

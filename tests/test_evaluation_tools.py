@@ -9,7 +9,7 @@ from scripts.aggregate_evaluation import write_benchmark
 from scripts.generate_review import generate_review
 from scripts.prepare_evaluation import prepare_evaluation
 from scripts.score_triggers import score_triggers
-from scripts.snapshot_skill import snapshot_skill
+from scripts.snapshot_skill import skill_digest, snapshot_skill
 from tests.test_validate_skill import make_valid_skill
 from scripts.validate_skill import parse_frontmatter
 
@@ -106,6 +106,46 @@ class EvaluationToolsTests(unittest.TestCase):
             self.assertEqual(payload["files"], 4)
             with self.assertRaises(FileExistsError):
                 snapshot_skill(skill)
+
+    def test_snapshot_dry_run_ignores_existing_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            skill = make_valid_skill(root)
+            before = snapshot_skill(skill, dry_run=True)
+            self.assertFalse(before["snapshot_exists"])
+            created = snapshot_skill(skill)
+            after = snapshot_skill(skill, dry_run=True)
+            self.assertEqual(after["status"], "dry-run")
+            self.assertTrue(after["snapshot_exists"])
+            self.assertEqual(after["sha256"], created["sha256"])
+            self.assertEqual(skill_digest(skill), created["sha256"])
+            with self.assertRaises(FileExistsError):
+                snapshot_skill(skill)
+
+    def test_prepare_improve_with_default_workspace_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            skill = make_valid_skill(root)
+            write_eval_set(skill)
+            snapshot = snapshot_skill(skill)
+            (skill / "SKILL.md").write_text(
+                (skill / "SKILL.md").read_text(encoding="utf-8") + "\n整改后的说明。\n",
+                encoding="utf-8",
+            )
+            improved = prepare_evaluation(
+                skill, "improve", 1, model="model-a", executor="isolated-a"
+            )
+            iteration = Path(str(improved["iteration_path"]))
+            self.assertEqual(
+                iteration.parent, Path(str(snapshot["snapshot"])).parent
+            )
+            plan = json.loads((iteration / "run_plan.json").read_text(encoding="utf-8"))
+            self.assertEqual(plan["configurations"], ["with_skill", "old_skill"])
+            runs = {run["configuration"]: run for run in plan["runs"]}
+            self.assertEqual(runs["old_skill"]["skill_path"], snapshot["snapshot"])
+            self.assertEqual(runs["old_skill"]["skill_hash"], snapshot["sha256"])
+            self.assertEqual(runs["with_skill"]["skill_hash"], skill_digest(skill))
+            self.assertNotEqual(runs["with_skill"]["skill_hash"], snapshot["sha256"])
 
     def test_snapshot_avoids_named_skills_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

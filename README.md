@@ -2,6 +2,10 @@
   <img src="./assets/readme/hero.png" width="100%" alt="oil-skill-creator：像做产品一样写 Skill">
 </p>
 
+<!-- yarkr:badges:start -->
+[![Indexed on Yarkr](https://api.yarkr.com/functions/v1/api/api/v1/badges/repos/oil-oil/oil-skill-creator/version.svg)](https://yarkr.com/arks/oil-oil/oil-skill-creator)
+<!-- yarkr:badges:end -->
+
 创建、评审和改进 Skill，检查功能边界、首次配置、执行稳定性、兼容性与发布交付。
 
 > 静态校验通过，只能证明已知结构没有问题，不能证明一个 Skill 真的有用。
@@ -171,3 +175,35 @@ schema 2 的每次运行还要在对应 `run-N/` 保存 `execution.json`，记�
 ## 许可证
 
 [MIT](./LICENSE)
+
+<!-- yarkr:install:start -->
+## Install with Yarkr
+
+This repo is indexed on [Yarkr](https://yarkr.com/arks/oil-oil/oil-skill-creator) as the ark [oil-oil/oil-skill-creator](https://yarkr.com/arks/oil-oil/oil-skill-creator), so its skills install into Claude Code, Codex, Cursor and other agent harnesses with one command.
+
+### CLI
+
+Install the whole ark, which Yarkr keeps equal to this repo:
+
+```bash
+npx yarkr-cli sync oil-oil/oil-skill-creator
+```
+
+Or add individual skills:
+
+```bash
+npx yarkr-cli add skill:oil-oil/oil-skill-creator/oil-skill-creator
+```
+
+No Node.js? `curl -fsSL https://yarkr.com/install.sh | sh` (macOS, Linux) or `irm https://yarkr.com/install.ps1 | iex` (Windows PowerShell) installs `yarkr` as a standalone binary; then type `yarkr` in place of `npx yarkr-cli`.
+
+### MCP
+
+Connect your agent to the ark over MCP:
+
+```bash
+npx yarkr-cli mcp add oil-oil/oil-skill-creator
+```
+
+Or point any MCP client at `https://api.yarkr.com/functions/v1/api/mcp/o/oil-oil/oil-skill-creator`.
+<!-- yarkr:install:end -->
